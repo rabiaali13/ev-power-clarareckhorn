@@ -1,6 +1,5 @@
----
 title: "EV Power - Lab 4 Project Report"
-format: typst
+format: pdf
 ---
 
 # Example Solution 1
@@ -8,27 +7,156 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
+---
+title: "Electric Vehicles and Renewable Energy in the U.S."
+author: "Rabia Ali"
+date: "2025-10-29"
+format: pdf
+---
+
+```{r setup, include=FALSE}
+# Load required libraries
+# Run this once to install missing libraries
+install.packages(c("tidyverse", "sf", "tmap", "tigris", "leaflet"))
+
+library(tidyverse)
+library(sf)
+library(tmap)
+library(tigris)
+library(leaflet)
+
+# Cache shapefiles for faster loading
+options(tigris_use_cache = TRUE)
 
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+Chosen Question: Electric vehicles reduce direct emissions, but does the electricity used to charge them actually come from clean sources?
+What is the share of electricity from renewable sources by state in 2023?
 
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
+# Load renewable energy CSVs
+
+renew_2021 <- read_csv("renew_use_2021.csv")
+renew_2022 <- read_csv("renew_use_2022.csv")
+renew_2023 <- read_csv("renew_use_2023.csv")
+
+# Load total energy CSVs
+
+total_2021 <- read_csv("total_energy_use_2021.csv")
+total_2022 <- read_csv("total_energy_use_2022.csv")
+total_2023 <- read_csv("total_energy_use_2023.csv")
+
+# Load average energy price
+
+energy_price <- read_csv("av_energy_price_2021-2023.csv")
+
+# Load EV registrations
+
+ev_regs <- read_csv("ev-registrations-by_state_2023.csv")
+# Function to clean column names
+
+clean_names <- function(df) {
+df %>%
+rename_with(~str_to_lower(.x)) %>%
+rename_with(~str_replace_all(.x, " ", "*")) %>%
+rename_with(~str_replace_all(.x, "-", "*"))
+}
+
+renew_2021 <- clean_names(renew_2021)
+renew_2022 <- clean_names(renew_2022)
+renew_2023 <- clean_names(renew_2023)
+total_2021 <- clean_names(total_2021)
+total_2022 <- clean_names(total_2022)
+total_2023 <- clean_names(total_2023)
+energy_price <- clean_names(energy_price)
+ev_regs <- clean_names(ev_regs)
+
+# Standardize state names
+
+standardize_states <- function(df) {
+df %>% mutate(state = str_to_title(state))
+}
+
+renew_2021 <- standardize_states(renew_2021)
+renew_2022 <- standardize_states(renew_2022)
+renew_2023 <- standardize_states(renew_2023)
+total_2021 <- standardize_states(total_2021)
+total_2022 <- standardize_states(total_2022)
+total_2023 <- standardize_states(total_2023)
+energy_price <- standardize_states(energy_price)
+ev_regs <- standardize_states(ev_regs)
 
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+# Combine yearly renewable and total energy data
+
+renew_all <- bind_rows(
+renew_2021 %>% mutate(year = 2021),
+renew_2022 %>% mutate(year = 2022),
+renew_2023 %>% mutate(year = 2023)
+)
+
+total_all <- bind_rows(
+total_2021 %>% mutate(year = 2021),
+total_2022 %>% mutate(year = 2022),
+total_2023 %>% mutate(year = 2023)
+)
+
+# Merge datasets
+
+energy_data <- renew_all %>%
+left_join(total_all, by = c("state", "year")) %>%
+left_join(energy_price, by = c("state", "year")) %>%
+left_join(ev_regs %>% mutate(year = 2023), by = "state")
+
+# Create new variables
+
+energy_data <- energy_data %>%
+mutate(
+renewable_share = renewable_use / total_energy_use,
+ev_ratio = ev_registrations / total_energy_use
+)
 
 ```
 
 ## **Part 4: Mapping Visualization**
 
 ```{r}
+# Check first few rows
+
+head(energy_data)
+# Load US states shapefile
+
+states_sf <- states(cb = TRUE)
+
+# Filter for 2023
+
+energy_2023 <- energy_data %>% filter(year == 2023)
+
+# Join shapefile with data
+
+map_data <- states_sf %>%
+left_join(energy_2023, by = c("NAME" = "state"))
+
+# Static map using tmap
+
+tm_shape(map_data) +
+tm_polygons(
+"renewable_share",
+palette = "Greens",
+title = "Renewable Share",
+style = "quantile"
+) +
+tm_layout(title = "Renewable Energy Share by State (2023)")
+
+
+```
 
 ```
